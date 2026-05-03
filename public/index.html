@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Selfize Admin</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .header { background: #1e293b; padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 20px; color: #38bdf8; }
+  .header .token-input { display: flex; gap: 8px; }
+  .header input { background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 6px 12px; border-radius: 6px; font-size: 13px; width: 240px; }
+  .layout { display: flex; min-height: calc(100vh - 57px); }
+  .sidebar { width: 240px; background: #1e293b; border-right: 1px solid #334155; padding: 16px; }
+  .sidebar h3 { font-size: 12px; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; letter-spacing: 1px; }
+  .col-item { padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 4px; font-size: 14px; transition: background 0.15s; }
+  .col-item:hover { background: #334155; }
+  .col-item.active { background: #0ea5e9; color: white; }
+  .main { flex: 1; padding: 24px; overflow-x: auto; }
+  .btn { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: #0ea5e9; color: white; }
+  .btn-danger { background: #ef4444; color: white; }
+  .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #475569; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #334155; font-size: 13px; }
+  th { color: #94a3b8; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+  td { color: #cbd5e1; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+  .empty { text-align: center; color: #64748b; padding: 60px 0; font-size: 15px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; width: 500px; max-height: 80vh; overflow-y: auto; }
+  .modal h2 { margin-bottom: 16px; font-size: 18px; }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+  .form-group input, .form-group textarea, .form-group select { width: 100%; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+  .form-group textarea { min-height: 80px; font-family: monospace; }
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: #334155; color: #94a3b8; }
+  .stats { display: flex; gap: 24px; margin-bottom: 20px; }
+  .stat { background: #1e293b; padding: 16px 20px; border-radius: 8px; border: 1px solid #334155; }
+  .stat .val { font-size: 28px; font-weight: 700; color: #38bdf8; }
+  .stat .lbl { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Selfize</h1>
+  <div class="token-input">
+    <input type="password" id="token" placeholder="Admin Token" />
+    <button class="btn btn-primary" onclick="connect()">Connect</button>
+  </div>
+</div>
+<div class="layout">
+  <div class="sidebar">
+    <h3>Collections</h3>
+    <div id="col-list"></div>
+    <button class="btn btn-ghost" style="width:100%;margin-top:12px" onclick="showCreateCollection()">+ New Collection</button>
+  </div>
+  <div class="main" id="main">
+    <div class="empty">Select a collection or create a new one</div>
+  </div>
+</div>
+<div id="modal-root"></div>
+
+<script>
+let TOKEN = localStorage.getItem('selfize_token') || ''
+let BASE = location.origin
+let currentCol = null
+
+if (TOKEN) { document.getElementById('token').value = TOKEN; loadCollections() }
+
+function connect() {
+  TOKEN = document.getElementById('token').value
+  localStorage.setItem('selfize_token', TOKEN)
+  loadCollections()
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + TOKEN, ...(opts.headers || {}) },
+  })
+  return res.json()
+}
+
+async function loadCollections() {
+  const data = await api('/api/collections')
+  const list = document.getElementById('col-list')
+  if (!data.collections) { list.innerHTML = '<div style="color:#ef4444;font-size:13px">Auth failed</div>'; return }
+  list.innerHTML = data.collections.map(c =>
+    `<div class="col-item ${currentCol === c.name ? 'active' : ''}" onclick="selectCollection('${c.name}')">${c.name} <span class="badge">${c.schema.length}f</span></div>`
+  ).join('')
+}
+
+async function selectCollection(name) {
+  currentCol = name
+  loadCollections()
+  const col = await api('/api/collections/' + name)
+  const data = await api('/api/collections/' + name + '/records?limit=50')
+  const main = document.getElementById('main')
+  const fields = ['id', ...col.schema.map(f => f.name), 'created_at']
+  main.innerHTML = `
+    <div class="toolbar">
+      <h2 style="flex:1">${name}</h2>
+      <button class="btn btn-primary" onclick="showCreateRecord()">+ Add Record</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCol('${name}')">Delete Collection</button>
+    </div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:12px">${data.total} records</div>
+    ${data.items.length === 0 ? '<div class="empty">No records yet</div>' : `
+    <table>
+      <tr>${fields.map(f => `<th>${f}</th>`).join('')}<th></th></tr>
+      ${data.items.map(r => `<tr>${fields.map(f => `<td title="${esc(str(r[f]))}">${esc(str(r[f]).slice(0,50))}</td>`).join('')}<td>
+        <button class="btn btn-ghost btn-sm" onclick='showEditRecord(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="delRecord('${r.id}')">Del</button>
+      </td></tr>`).join('')}
+    </table>`}
+  `
+}
+
+function str(v) { return v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v) }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+function showModal(html) { document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>` }
+function closeModal() { document.getElementById('modal-root').innerHTML = '' }
+
+function showCreateCollection() {
+  showModal(`
+    <h2>New Collection</h2>
+    <div class="form-group"><label>Name</label><input id="m-name" placeholder="e.g. books" /></div>
+    <div class="form-group"><label>Schema (JSON)</label><textarea id="m-schema" placeholder='[{"name":"title","type":"text","required":true}]'></textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doCreateCollection()">Create</button>
+    </div>
+  `)
+}
+
+async function doCreateCollection() {
+  const name = document.getElementById('m-name').value
+  let schema; try { schema = JSON.parse(document.getElementById('m-schema').value) } catch { alert('Invalid JSON'); return }
+  await api('/api/collections', { method: 'POST', body: JSON.stringify({ name, schema }) })
+  closeModal(); loadCollections(); selectCollection(name)
+}
+
+async function deleteCol(name) {
+  if (!confirm('Delete collection "' + name + '"?')) return
+  await api('/api/collections/' + name, { method: 'DELETE' })
+  currentCol = null; loadCollections()
+  document.getElementById('main').innerHTML = '<div class="empty">Collection deleted</div>'
+}
+
+function showCreateRecord() {
+  showModal(`
+    <h2>New Record</h2>
+    <div class="form-group"><label>Data (JSON)</label><textarea id="m-data" placeholder='{"title":"My Book","author":"Someone"}'></textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doCreateRecord()">Create</button>
+    </div>
+  `)
+}
+
+async function doCreateRecord() {
+  let data; try { data = JSON.parse(document.getElementById('m-data').value) } catch { alert('Invalid JSON'); return }
+  await api('/api/collections/' + currentCol + '/records', { method: 'POST', body: JSON.stringify(data) })
+  closeModal(); selectCollection(currentCol)
+}
+
+function showEditRecord(record) {
+  const { id, created_at, updated_at, ...fields } = record
+  showModal(`
+    <h2>Edit Record</h2>
+    <div style="font-size:12px;color:#64748b;margin-bottom:12px">ID: ${id}</div>
+    <div class="form-group"><label>Data (JSON)</label><textarea id="m-data">${esc(JSON.stringify(fields, null, 2))}</textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doUpdateRecord('${id}')">Save</button>
+    </div>
+  `)
+}
+
+async function doUpdateRecord(id) {
+  let data; try { data = JSON.parse(document.getElementById('m-data').value) } catch { alert('Invalid JSON'); return }
+  await api('/api/collections/' + currentCol + '/records/' + id, { method: 'PATCH', body: JSON.stringify(data) })
+  closeModal(); selectCollection(currentCol)
+}
+
+async function delRecord(id) {
+  if (!confirm('Delete this record?')) return
+  await api('/api/collections/' + currentCol + '/records/' + id, { method: 'DELETE' })
+  selectCollection(currentCol)
+}
+</script>
+</body>
+</html>
