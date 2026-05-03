@@ -1,12 +1,15 @@
 const Database = require('better-sqlite3')
 const { join } = require('path')
+const { mkdirSync } = require('fs')
 
-const DB_PATH = join(__dirname, '..', 'data', 'selfize.db')
+const DATA_DIR = join(__dirname, '..', 'data')
+const DB_PATH = join(DATA_DIR, 'selfize.db')
 
 let _db = null
 
 function getDb() {
   if (_db) return _db
+  mkdirSync(DATA_DIR, { recursive: true })
   _db = new Database(DB_PATH)
   _db.pragma('journal_mode = WAL')
   _db.pragma('foreign_keys = ON')
