@@ -3,12 +3,18 @@ const { getDb } = require('./db')
 const { getCollection } = require('./collections')
 const { parseQuery } = require('./query')
 
-function listRecords(collectionName, queryParams) {
+function listRecords(collectionName, queryParams, owner) {
   const db = getDb()
   const col = getCollection(collectionName)
   if (!col) throw Object.assign(new Error(`Collection "${collectionName}" not found`), { status: 404 })
 
-  const { whereClause, values, orderClause, limit, offset, selectClause, expand } = parseQuery(queryParams, col.schema)
+  let { whereClause, values, orderClause, limit, offset, selectClause, expand } = parseQuery(queryParams, col.schema)
+
+  // per-user 隔離：伺服器端強制 _owner 過濾
+  if (owner) {
+    whereClause = whereClause ? `${whereClause} AND "_owner" = ?` : 'WHERE "_owner" = ?'
+    values = [...values, owner]
+  }
 
   const countSql = `SELECT COUNT(*) as total FROM "${collectionName}" ${whereClause}`
   const total = db.prepare(countSql).get(...values).total
@@ -25,13 +31,14 @@ function listRecords(collectionName, queryParams) {
   return { items, total, limit, offset }
 }
 
-function getRecord(collectionName, id, queryParams = {}) {
+function getRecord(collectionName, id, queryParams = {}, owner) {
   const db = getDb()
   const col = getCollection(collectionName)
   if (!col) throw Object.assign(new Error(`Collection "${collectionName}" not found`), { status: 404 })
 
   const row = db.prepare(`SELECT * FROM "${collectionName}" WHERE id = ?`).get(id)
   if (!row) throw Object.assign(new Error('Record not found'), { status: 404 })
+  if (owner && row._owner !== owner) throw Object.assign(new Error('Record not found'), { status: 404 })
 
   const item = deserializeRow(row, col.schema)
 
@@ -69,13 +76,15 @@ function createRecord(collectionName, data) {
   return getRecord(collectionName, id)
 }
 
-function updateRecord(collectionName, id, data) {
+function updateRecord(collectionName, id, data, owner) {
   const db = getDb()
   const col = getCollection(collectionName)
   if (!col) throw Object.assign(new Error(`Collection "${collectionName}" not found`), { status: 404 })
 
-  const existing = db.prepare(`SELECT id FROM "${collectionName}" WHERE id = ?`).get(id)
+  const existing = db.prepare(`SELECT * FROM "${collectionName}" WHERE id = ?`).get(id)
   if (!existing) throw Object.assign(new Error('Record not found'), { status: 404 })
+  if (owner && existing._owner !== owner) throw Object.assign(new Error('Record not found'), { status: 404 })
+  delete data._owner
 
   const sets = []
   const values = []
@@ -97,13 +106,14 @@ function updateRecord(collectionName, id, data) {
   return getRecord(collectionName, id)
 }
 
-function deleteRecord(collectionName, id) {
+function deleteRecord(collectionName, id, owner) {
   const db = getDb()
   const col = getCollection(collectionName)
   if (!col) throw Object.assign(new Error(`Collection "${collectionName}" not found`), { status: 404 })
 
-  const existing = db.prepare(`SELECT id FROM "${collectionName}" WHERE id = ?`).get(id)
+  const existing = db.prepare(`SELECT * FROM "${collectionName}" WHERE id = ?`).get(id)
   if (!existing) throw Object.assign(new Error('Record not found'), { status: 404 })
+  if (owner && existing._owner !== owner) throw Object.assign(new Error('Record not found'), { status: 404 })
 
   db.prepare(`DELETE FROM "${collectionName}" WHERE id = ?`).run(id)
   return { deleted: id }

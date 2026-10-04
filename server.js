@@ -2,6 +2,7 @@ const http = require('http')
 const { readFileSync, existsSync } = require('fs')
 const { join, extname } = require('path')
 const { requireAdmin, isAdmin } = require('./src/auth')
+const { verifyLmuToken, ownerKey } = require('./src/lmu')
 const collections = require('./src/collections')
 const records = require('./src/records')
 
@@ -121,13 +122,23 @@ const server = http.createServer(async (req, res) => {
 
       const rules = col.rules || {}
 
+      // rules 值 'user'：需要有效 LetMeUse token，只能碰自己的資料（admin 不受限）
+      const admin = isAdmin(req)
+      let lmu = null
+      if (Object.values(rules).includes('user') && !admin) lmu = await verifyLmuToken(req)
+      const ownerFor = (ruleVal) => {
+        if (ruleVal !== 'user' || admin) return undefined
+        if (!lmu) throw Object.assign(new Error('Login required'), { status: 401 })
+        return ownerKey(lmu)
+      }
+
       if (!recordId) {
         if (method === 'GET') {
           if (rules.read === 'admin') {
             const authErr = requireAdmin(req)
             if (authErr) return json(res, authErr, authErr.code)
           }
-          const result = records.listRecords(colName, params)
+          const result = records.listRecords(colName, params, ownerFor(rules.read))
           return json(res, result)
         }
         if (method === 'POST') {
@@ -136,6 +147,8 @@ const server = http.createServer(async (req, res) => {
             if (authErr) return json(res, authErr, authErr.code)
           }
           const body = await parseBody(req)
+          const createOwner = ownerFor(rules.create)
+          if (createOwner) body._owner = createOwner
           const result = records.createRecord(colName, body)
           return json(res, result, 201)
         }
@@ -145,7 +158,7 @@ const server = http.createServer(async (req, res) => {
             const authErr = requireAdmin(req)
             if (authErr) return json(res, authErr, authErr.code)
           }
-          const result = records.getRecord(colName, recordId, params)
+          const result = records.getRecord(colName, recordId, params, ownerFor(rules.read))
           return json(res, result)
         }
         if (method === 'PATCH' || method === 'PUT') {
@@ -154,7 +167,7 @@ const server = http.createServer(async (req, res) => {
             if (authErr) return json(res, authErr, authErr.code)
           }
           const body = await parseBody(req)
-          const result = records.updateRecord(colName, recordId, body)
+          const result = records.updateRecord(colName, recordId, body, ownerFor(rules.update))
           return json(res, result)
         }
         if (method === 'DELETE') {
@@ -162,7 +175,7 @@ const server = http.createServer(async (req, res) => {
             const authErr = requireAdmin(req)
             if (authErr) return json(res, authErr, authErr.code)
           }
-          const result = records.deleteRecord(colName, recordId)
+          const result = records.deleteRecord(colName, recordId, ownerFor(rules.delete))
           return json(res, result)
         }
       }

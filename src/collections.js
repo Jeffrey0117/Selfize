@@ -38,6 +38,11 @@ function createCollection(name, fields, rules = {}) {
 
   const defaultRules = { read: 'public', create: 'public', update: 'public', delete: 'public' }
   const mergedRules = { ...defaultRules, ...rules }
+  // 規則含 'user' 的 collection 必須有 _owner 欄位（owner 隔離用），沒宣告就自動補
+  if (Object.values(mergedRules).includes('user') && !fields.some((f) => f && f.name === '_owner')) {
+    fields = [...fields, { name: '_owner', type: 'text' }]
+  }
+
 
   db.prepare(`
     INSERT INTO _collections (name, schema, rules) VALUES (?, ?, ?)
