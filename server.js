@@ -23,9 +23,13 @@ function parseUrl(url) {
   const [path, qs] = url.split('?')
   const params = {}
   if (qs) {
+    // query string 規範：'+' 代表空格，須在 decodeURIComponent 前還原，
+    // 否則含空格的值（如 "The Let Them Theory"）會被當成帶 '+' 的字面字串
+    const dec = (s) => decodeURIComponent(String(s).replace(/\+/g, ' '))
     for (const pair of qs.split('&')) {
-      const [k, v] = pair.split('=').map(decodeURIComponent)
-      params[k] = v
+      const [k, v] = pair.split('=')
+      if (k === undefined) continue
+      params[dec(k)] = v === undefined ? '' : dec(v)
     }
   }
   return { path: path.replace(/\/+$/, '') || '/', params }
