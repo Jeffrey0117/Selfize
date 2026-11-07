@@ -3,3 +3,9 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 .env
+
+# CloudPipe 部署產物（含明文金鑰 —— 這個 repo 是公開的）
+.pm2-ecosystem.json
+.pm2-bg-ecosystem.json
+.deploy-state.json
+.pkg-hash

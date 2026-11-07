@@ -33,7 +33,9 @@ selfize/
 - **Dynamic collections**: Metadata lives in the `_collections` table (`name`, `schema` JSON, `rules` JSON). Each collection is a real SQLite table created at runtime. Collection names must be lowercase alphanumeric + underscore, not starting with `_`.
 - **Auto fields**: Every record gets `id` (UUID), `created_at`, `updated_at` automatically.
 - **Field types** (`db.js` TYPE_MAP): `text`→TEXT, `number`→REAL, `integer`→INTEGER, `boolean`→INTEGER (0/1, returned bool), `json`→TEXT (auto serialize/deserialize), `date`→TEXT (ISO 8601). Field options: `required`, `default`, `ref`.
-- **Access rules** (per collection, per op `read`/`create`/`update`/`delete`): `"public"` = no auth, `"admin"` = requires `Authorization: Bearer <token>`. Collection admin API always requires admin; record endpoints honor the collection's rules.
+- **Access rules** (per collection, per op `read`/`create`/`update`/`delete`): `"public"` = no auth, `"admin"` = requires `Authorization: Bearer <token>`, `"user"` = requires a LetMeUse access token and scopes rows to that user via `_owner` (`<appId>:<sub>`). Collection admin API always requires admin; record endpoints honor the collection's rules.
+  - ⚠️ The default for a new collection is `public` on **all four** ops. That means create/update/**delete** are open to the internet unless you pass `rules` explicitly. Always set them.
+  - `user` rules need `SELFIZE_LMU_APPS` — it is the only tenancy boundary (LetMeUse signs every app's tokens with the same key), and an empty list rejects everything.
 - **Query API** (`query.js`): filter `?field=value` (exact) or `?field=op.value` with ops `eq/neq/gt/gte/lt/lte/like`; `sort` (`-` prefix = DESC); `limit`/`offset`/`page`/`perPage` (max 500); `select` for field projection; `expand` to inline `ref` relations (returns `<field>_expanded`).
 - **Schema updates**: `PATCH /api/collections/:name` adds new fields via `ALTER TABLE` (additive only).
 
@@ -51,8 +53,9 @@ selfize/
 | `npm install` | Install dependencies |
 | `npm start` | Run server (`node server.js`) |
 | `npm run dev` | Run with auto-restart (`node --watch server.js`) |
+| `npm test` | Run the LetMeUse-verification tests (`node --test`, no network) |
 
-No build or test scripts are defined.
+No build script. `npm test` covers `src/lmu.js` only (12 tests against a fake local IdP).
 
 ## Environment variables
 
@@ -61,6 +64,8 @@ No build or test scripts are defined.
 | `PORT` | `4021` | Server port |
 | `SELFIZE_TOKEN` | *(required)* | Admin API bearer token; unset = admin locked (random token) |
 | `CORS_ORIGIN` | `*` | Allowed CORS origin |
+| `LETMEUSE_URL` | `http://localhost:4006` | LetMeUse origin; JWKS is fetched from `<url>/api/jwks` |
+| `SELFIZE_LMU_APPS` | *(empty = reject all)* | Comma-separated LetMeUse appIds allowed to use `user`-rule collections |
 
 ## Coding rules
 

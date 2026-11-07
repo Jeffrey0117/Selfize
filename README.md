@@ -35,7 +35,7 @@ Server starts on `http://localhost:4021`. Open it in a browser to access the adm
 | `SELFIZE_TOKEN` | *(required)* | Admin API token. If unset, admin endpoints are locked with a random token |
 | `CORS_ORIGIN` | `*` | Allowed CORS origin |
 | `LETMEUSE_URL` | `http://localhost:4006` | LetMeUse server for verifying user tokens (JWKS) — only needed for `user` rules |
-| `SELFIZE_LMU_APPS` | *(empty = any app)* | Comma-separated LetMeUse appIds allowed to call `user` collections |
+| `SELFIZE_LMU_APPS` | *(required for `user` rules)* | Comma-separated LetMeUse appIds allowed to call `user` collections. **Empty = reject everything** (fail-closed). LetMeUse signs every app's tokens with the same ES256 key, so this list is the only tenancy boundary there is. |
 
 ## API Reference
 

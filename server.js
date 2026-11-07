@@ -2,7 +2,7 @@ const http = require('http')
 const { readFileSync, existsSync } = require('fs')
 const { join, extname } = require('path')
 const { requireAdmin, isAdmin } = require('./src/auth')
-const { verifyLmuToken, ownerKey } = require('./src/lmu')
+const { verifyLmuToken, ownerKey, jwksStats, warmUp } = require('./src/lmu')
 const collections = require('./src/collections')
 const records = require('./src/records')
 
@@ -73,7 +73,10 @@ const server = http.createServer(async (req, res) => {
   try {
     // Health
     if (path === '/api/health') {
-      return json(res, { status: 'ok', service: 'selfize' })
+      // 刻意回 200 而不是 503：JWKS 抓不到是上游（letmeuse）的問題,重啟 selfize
+      // 救不了它,而 cloudpipe watchdog 探的就是這支 → 回 5xx 只會換來無用的重啟
+      // 迴圈。狀態放在 body 裡,讓「fail-closed」看得見而不是變成無聲故障。
+      return json(res, { status: 'ok', service: 'selfize', jwks: jwksStats() })
     }
 
     // --- Collection admin API ---
@@ -202,6 +205,14 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`Selfize running on :${PORT}`)
+  // 預熱 JWKS。不預熱的話重啟後「第一個」請求就算帶完全有效的 token 也會 401
+  // （快取還是空的,只會在背景去抓鑰匙）,使用者看到的是「我的登入壞了」。
+  const s = await warmUp()
+  if (!s.keys) {
+    console.warn('[selfize] JWKS 預熱沒拿到金鑰 — rules:user 的 collection 會全部 401:', s.lastError)
+  } else {
+    console.log(`[selfize] JWKS ready (${s.keys} key(s), kid=${s.kids.join(',')})`)
+  }
 })
