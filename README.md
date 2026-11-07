@@ -12,7 +12,7 @@ Define collections with JSON schemas, get instant CRUD endpoints — no migratio
 - **Pagination** — Limit/offset and page-based pagination (max 500 per page)
 - **Field Selection** — Return only the fields you need with `?select=id,title`
 - **Relation Expansion** — Expand foreign key references inline with `?expand=owner_id`
-- **Access Rules** — Per-collection, per-operation access control (`public` or `admin`)
+- **Access Rules** — Per-collection, per-operation access control (`public`, `admin`, or `user` — per-user ownership via LetMeUse)
 - **Admin Dashboard** — Built-in dark-themed web UI for managing collections and records
 - **Zero Config** — Single SQLite file, WAL mode, no setup required
 
@@ -34,6 +34,8 @@ Server starts on `http://localhost:4021`. Open it in a browser to access the adm
 | `PORT` | `4021` | Server port |
 | `SELFIZE_TOKEN` | *(required)* | Admin API token. If unset, admin endpoints are locked with a random token |
 | `CORS_ORIGIN` | `*` | Allowed CORS origin |
+| `LETMEUSE_URL` | `http://localhost:4006` | LetMeUse server for verifying user tokens (JWKS) — only needed for `user` rules |
+| `SELFIZE_LMU_APPS` | *(empty = any app)* | Comma-separated LetMeUse appIds allowed to call `user` collections |
 
 ## API Reference
 
@@ -299,8 +301,9 @@ Each collection has rules for `read`, `create`, `update`, and `delete`:
 |---|---|
 | `"public"` | No authentication required |
 | `"admin"` | Requires valid `Authorization: Bearer <token>` header |
+| `"user"` | Requires a signed-in [LetMeUse](https://github.com/Jeffrey0117/LetMeUse) user (`Authorization: Bearer <user access token>`, ES256). Each record is stamped with an `_owner` field; users only see and change their own records — someone else's record returns 404, and `_owner` can't be overwritten |
 
-Default is `"public"` for all operations.
+Default is `"public"` for all operations. If any rule is `"user"`, an `_owner` field is added to the collection automatically. The admin token still sees everything.
 
 ## Project Structure
 
@@ -308,7 +311,8 @@ Default is `"public"` for all operations.
 selfize/
 ├── server.js             # HTTP server, routing, CORS, static files
 ├── src/
-│   ├── auth.js           # Token-based admin authentication
+│   ├── auth.js           # Token-based admin authentication (constant-time, fail closed)
+│   ├── lmu.js            # LetMeUse ES256 user-token verification for `user` rules
 │   ├── collections.js    # Collection CRUD + schema management
 │   ├── db.js             # SQLite initialization, table creation
 │   ├── query.js          # Query parameter parsing (filter/sort/paginate)
@@ -358,4 +362,4 @@ Data is stored in `./data/selfize.db`. Back up this file to back up everything.
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE)
