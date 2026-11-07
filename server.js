@@ -76,7 +76,19 @@ const server = http.createServer(async (req, res) => {
       // 刻意回 200 而不是 503：JWKS 抓不到是上游（letmeuse）的問題,重啟 selfize
       // 救不了它,而 cloudpipe watchdog 探的就是這支 → 回 5xx 只會換來無用的重啟
       // 迴圈。狀態放在 body 裡,讓「fail-closed」看得見而不是變成無聲故障。
-      return json(res, { status: 'ok', service: 'selfize', jwks: jwksStats() })
+      //
+      // 但公開版只給最小狀態：完整的 stats() 含內部 JWKS 網址（洩漏拓撲）和
+      // lastMissKid（會把呼叫端送來的值原樣反射出去）。細節要帶 admin token。
+      // 同 SelfBase 的慣例。
+      const s = jwksStats()
+      if (!isAdmin(req)) {
+        return json(res, {
+          status: 'ok',
+          service: 'selfize',
+          jwks: { ok: s.keys > 0 && !s.stale, keys: s.keys, degraded: !!s.lastError },
+        })
+      }
+      return json(res, { status: 'ok', service: 'selfize', jwks: s })
     }
 
     // --- Collection admin API ---
