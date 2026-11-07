@@ -1,4 +1,6 @@
-const { getDb, createCollectionTable, dropCollectionTable } = require('./db')
+const {
+  getDb, createCollectionTable, dropCollectionTable, TYPE_MAP, sqlDefault, validateFields,
+} = require('./db')
 
 function listCollections() {
   const db = getDb()
@@ -31,6 +33,8 @@ function createCollection(name, fields, rules = {}) {
     throw new Error('Collection name must be lowercase alphanumeric with underscores')
   }
 
+  validateFields(fields)
+
   const existing = getCollection(name)
   if (existing) {
     throw new Error(`Collection "${name}" already exists`)
@@ -62,6 +66,7 @@ function updateCollection(name, updates) {
   const params = []
 
   if (updates.schema) {
+    validateFields(updates.schema)
     sets.push('schema = ?')
     params.push(JSON.stringify(updates.schema))
 
@@ -69,10 +74,8 @@ function updateCollection(name, updates) {
     for (const field of updates.schema) {
       const existingField = existing.schema.find((f) => f.name === field.name)
       if (!existingField) {
-        const sqlType = require('./db').TYPE_MAP[field.type] || 'TEXT'
-        const def = field.default !== undefined
-          ? ` DEFAULT ${typeof field.default === 'string' ? `'${field.default}'` : field.default}`
-          : ''
+        const sqlType = TYPE_MAP[field.type] || 'TEXT'
+        const def = field.default !== undefined ? ` DEFAULT ${sqlDefault(field.default)}` : ''
         try {
           db.exec(`ALTER TABLE "${name}" ADD COLUMN "${field.name}" ${sqlType}${def}`)
         } catch (e) {

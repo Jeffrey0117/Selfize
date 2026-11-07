@@ -32,7 +32,7 @@ Server starts on `http://localhost:4021`. Open it in a browser to access the adm
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `4021` | Server port |
-| `SELFIZE_TOKEN` | `selfize-dev-token` | Admin API token |
+| `SELFIZE_TOKEN` | *(required)* | Admin API token. If unset, admin endpoints are locked with a random token |
 | `CORS_ORIGIN` | `*` | Allowed CORS origin |
 
 ## API Reference

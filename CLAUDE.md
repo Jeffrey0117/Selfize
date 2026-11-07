@@ -59,7 +59,7 @@ No build or test scripts are defined.
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `4021` | Server port |
-| `SELFIZE_TOKEN` | `selfize-dev-token` | Admin API bearer token |
+| `SELFIZE_TOKEN` | *(required)* | Admin API bearer token; unset = admin locked (random token) |
 | `CORS_ORIGIN` | `*` | Allowed CORS origin |
 
 ## Coding rules
