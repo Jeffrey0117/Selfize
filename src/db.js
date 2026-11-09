@@ -2,7 +2,10 @@ const Database = require('better-sqlite3')
 const { join } = require('path')
 const { mkdirSync } = require('fs')
 
-const DATA_DIR = join(__dirname, '..', 'data')
+// 資料目錄可用 env 覆寫。加這個是為了讓 collections / records 的邏輯**測得到** ——
+// 寫死路徑的話，任何碰 getDb() 的測試都會寫進正式的 data/selfize.db。
+// 生產環境不設它，行為跟以前完全一樣。
+const DATA_DIR = process.env.SELFIZE_DATA_DIR || join(__dirname, '..', 'data')
 const DB_PATH = join(DATA_DIR, 'selfize.db')
 
 let _db = null
@@ -99,7 +102,13 @@ function dropCollectionTable(name) {
   db.exec(`DROP TABLE IF EXISTS "${name}"`)
 }
 
+/** 給測試用：確認目前連到的是哪一顆 DB。 */
+function getDbPath() {
+  return DB_PATH
+}
+
 module.exports = {
+  getDbPath,
   getDb, createCollectionTable, dropCollectionTable, TYPE_MAP,
   assertFieldName, sqlDefault, validateFields,
 }
