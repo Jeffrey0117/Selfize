@@ -1,0 +1,300 @@
+{
+  "repo": 1,
+  "name": "selfize",
+  "what": "Self-hosted SQLite REST API — like PocketBase, but Node.js",
+  "kind": "service",
+  "work": {
+    "guide": "CLAUDE.md",
+    "run": "npm run dev",
+    "test": "npm test",
+    "deploy": "git push"
+  },
+  "offers": [
+    {
+      "id": "health_check",
+      "what": "Returns service health status. Call to verify the Selfize server is reachable before issuing other requests.",
+      "how": "http",
+      "http": {
+        "method": "GET",
+        "path": "/api/health"
+      }
+    },
+    {
+      "id": "list_collections",
+      "what": "Lists all defined collections with their schema and access rules. Call to discover what collections exist and their field definitions.",
+      "how": "http",
+      "http": {
+        "method": "GET",
+        "path": "/api/collections",
+        "auth": "bearer"
+      }
+    },
+    {
+      "id": "create_collection",
+      "what": "Creates a new collection (a real SQLite table) from a field schema. Call to define a new data type before storing records in it.",
+      "how": "http",
+      "http": {
+        "method": "POST",
+        "path": "/api/collections",
+        "auth": "bearer",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Collection name; lowercase alphanumeric + underscore, must not start with '_'"
+            },
+            "schema": {
+              "type": "array",
+              "description": "Array of field definitions. Each field: {name, type, required?, default?, ref?}. type is one of text|number|integer|boolean|json|date. 'ref' names another collection for relations. Alias: 'fields'."
+            },
+            "rules": {
+              "type": "object",
+              "description": "Per-operation access rules {read, create, update, delete}, each 'public', 'admin' or 'user' (LetMeUse login required; users only see and change their own records). Defaults to all 'public' if omitted, so pass it explicitly."
+            }
+          },
+          "required": [
+            "name",
+            "schema"
+          ]
+        }
+      }
+    },
+    {
+      "id": "get_collection",
+      "what": "Fetches a single collection's schema and rules by name. Call to inspect one collection's structure.",
+      "how": "http",
+      "http": {
+        "method": "GET",
+        "path": "/api/collections/{name}",
+        "auth": "bearer",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Collection name (path segment)"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "id": "update_collection",
+      "what": "Updates a collection's schema (additively adds new fields via ALTER TABLE) and/or its access rules. Call to add fields or change auth rules on an existing collection.",
+      "how": "http",
+      "http": {
+        "method": "PATCH",
+        "path": "/api/collections/{name}",
+        "auth": "bearer",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Collection name (path segment)"
+            },
+            "schema": {
+              "type": "array",
+              "description": "Full field-definition array; any field not already present is added as a new column (additive only)."
+            },
+            "rules": {
+              "type": "object",
+              "description": "Partial access rules to merge {read, create, update, delete}, each 'public', 'admin' or 'user'."
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "id": "delete_collection",
+      "what": "Deletes a collection and drops its underlying table along with all records. Call to permanently remove a collection.",
+      "how": "http",
+      "http": {
+        "method": "DELETE",
+        "path": "/api/collections/{name}",
+        "auth": "bearer",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Collection name (path segment)"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "id": "list_records",
+      "what": "Lists records in a collection with filtering, sorting, pagination, field selection, and relation expansion. Returns {items, total, limit, offset}. Call to query stored data. Auth depends on the collection's read rule (public by default).",
+      "how": "http",
+      "http": {
+        "method": "GET",
+        "path": "/api/collections/{name}/records",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Collection name (path segment)"
+            },
+            "sort": {
+              "type": "string",
+              "description": "Comma-separated fields to sort by; '-' prefix means DESC (e.g. '-created_at,title')"
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Max records to return (default 100, max 500)"
+            },
+            "offset": {
+              "type": "integer",
+              "description": "Number of records to skip"
+            },
+            "page": {
+              "type": "integer",
+              "description": "1-based page number; used with perPage to compute offset"
+            },
+            "perPage": {
+              "type": "integer",
+              "description": "Alias for limit when paginating"
+            },
+            "select": {
+              "type": "string",
+              "description": "Comma-separated field names to project (id always included)"
+            },
+            "expand": {
+              "type": "string",
+              "description": "Comma-separated ref-field names to inline as '<field>_expanded'"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "id": "create_record",
+      "what": "Creates a new record in a collection (auto-assigns id, created_at, updated_at; validates required fields). Call to insert data. Auth depends on the collection's create rule (public by default).",
+      "how": "http",
+      "http": {
+        "method": "POST",
+        "path": "/api/collections/{name}/records",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Collection name (path segment)"
+            },
+            "record": {
+              "type": "object",
+              "description": "Record body: key/value pairs matching the collection schema fields. Optional 'id' overrides the auto-generated UUID. Required schema fields must be present."
+            }
+          },
+          "required": [
+            "name",
+            "record"
+          ]
+        }
+      }
+    },
+    {
+      "id": "get_record",
+      "what": "Fetches a single record by id, optionally expanding ref relations. Call to read one record. Auth depends on the collection's read rule.",
+      "how": "http",
+      "http": {
+        "method": "GET",
+        "path": "/api/collections/{name}/records/{id}",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Collection name (path segment)"
+            },
+            "id": {
+              "type": "string",
+              "description": "Record id (path segment)"
+            },
+            "expand": {
+              "type": "string",
+              "description": "Comma-separated ref-field names to inline as '<field>_expanded'"
+            }
+          },
+          "required": [
+            "name",
+            "id"
+          ]
+        }
+      }
+    },
+    {
+      "id": "update_record",
+      "what": "Updates fields of an existing record by id (partial update; touches updated_at). Call to modify stored data. Auth depends on the collection's update rule.",
+      "how": "http",
+      "http": {
+        "method": "PATCH",
+        "path": "/api/collections/{name}/records/{id}",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Collection name (path segment)"
+            },
+            "id": {
+              "type": "string",
+              "description": "Record id (path segment)"
+            },
+            "record": {
+              "type": "object",
+              "description": "Partial record body: schema field key/value pairs to update. At least one valid field required."
+            }
+          },
+          "required": [
+            "name",
+            "id",
+            "record"
+          ]
+        }
+      }
+    },
+    {
+      "id": "delete_record",
+      "what": "Deletes a record by id. Call to permanently remove one record. Auth depends on the collection's delete rule.",
+      "how": "http",
+      "http": {
+        "method": "DELETE",
+        "path": "/api/collections/{name}/records/{id}",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Collection name (path segment)"
+            },
+            "id": {
+              "type": "string",
+              "description": "Record id (path segment)"
+            }
+          },
+          "required": [
+            "name",
+            "id"
+          ]
+        }
+      }
+    }
+  ]
+}
